@@ -1,0 +1,23 @@
+<h2>Chat</h2>
+
+<p>
+  <label>
+    Target User ID:
+    <input [(ngModel)]="targetUserId" placeholder="Enter User ID to chat" />
+  </label>
+</p>
+
+<p>
+  <label>
+    Message:
+    <input [(ngModel)]="messageText" placeholder="Type your message" />
+  </label>
+  <button (click)="sendMessage()">Send</button>
+</p>
+
+<div *ngFor="let m of messages">
+  <p>
+    <b>{{ m.fromUserId === userId ? 'You' : 'Friend' }}:</b> {{ m.message }}
+    <small>({{ m.timestamp | date:'short' }})</small>
+  </p>
+</div>

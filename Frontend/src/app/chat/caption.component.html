@@ -1,0 +1,19 @@
+<div class="caption-container">
+  <h2>AI Caption Generator</h2>
+
+  <label>
+    Mood:
+    <input [(ngModel)]="mood" type="text" placeholder="Enter mood (e.g. funny, happy)" />
+  </label>
+
+  <label>
+    Keywords:
+    <input [(ngModel)]="keywords" type="text" placeholder="Enter keywords (comma separated)" />
+  </label>
+
+  <button (click)="generateCaption()" [disabled]="isLoading">Generate Caption</button>
+
+  <p *ngIf="isLoading">Generating caption...</p>
+  <p *ngIf="caption"><strong>Caption:</strong> {{ caption }}</p>
+  <p *ngIf="error" style="color:red;">{{ error }}</p>
+</div>

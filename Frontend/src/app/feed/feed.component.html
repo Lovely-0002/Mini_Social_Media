@@ -1,0 +1,8 @@
+<h2>Your Feed</h2>
+<textarea [(ngModel)]="content" placeholder="What's on your mind?"></textarea>
+<button (click)="createPost()">Post</button>
+
+<div *ngFor="let p of posts">
+  <p><b>{{p.userId.name}}</b>: {{p.content}}</p>
+  <button (click)="like(p)">Like ({{p.likes.length}})</button>
+</div>

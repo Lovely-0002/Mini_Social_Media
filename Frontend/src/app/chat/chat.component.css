@@ -1,0 +1,22 @@
+.chat-container {
+  max-width: 530px;
+  margin: 32px auto 0;
+  padding: 25px;
+  background: #f3f8fd;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px 0 rgba(60,80,120,.09);
+}
+
+.chat-message-user {
+  color: #136c10;
+  font-weight: 600;
+}
+.chat-message-friend {
+  color: #0a5ca8;
+  font-weight: 600;
+}
+
+.chat-history {
+  margin-top: 18px;
+  margin-bottom: 15px;
+}

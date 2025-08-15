@@ -1,0 +1,18 @@
+<div class="ai-chat-container">
+  <h2>AI Chat</h2>
+  <div class="ai-chat-messages">
+    <p *ngFor="let msg of messages">
+      <strong>{{ msg.role === 'user' ? 'You' : 'AI' }}:</strong>
+      <span>{{ msg.content }}</span>
+    </p>
+  </div>
+  <div class="ai-chat-input-row">
+    <input
+      type="text"
+      [(ngModel)]="userMessage"
+      placeholder="Type your message here"
+      (keyup.enter)="sendMessage()"
+    />
+    <button (click)="sendMessage()">Send</button>
+  </div>
+</div>

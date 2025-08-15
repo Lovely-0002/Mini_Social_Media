@@ -1,0 +1,6 @@
+<h2>Register</h2>
+<input placeholder="Name" [(ngModel)]="name">
+<input placeholder="Email" [(ngModel)]="email">
+<input placeholder="Password" type="password" [(ngModel)]="password">
+<button (click)="register()">Register</button>
+<p>Already have an account? <a routerLink="/login">Login here</a></p>
