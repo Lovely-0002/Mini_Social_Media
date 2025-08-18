@@ -1,3 +1,13 @@
+<!-- src/app/app.component.html -->
+
+<!-- TOP BAR WITH LOGOUT BUTTON -->
+<div style="width: 100%; background: #f5f7fb; display: flex; justify-content: flex-end; padding: 8px 16px 4px 16px;">
+  <button (click)="logout()" style="padding: 7px 18px; background: #fd5454; color: white; border: none; border-radius: 4px; font-weight: bold; cursor: pointer;">
+    Logout
+  </button>
+</div>
+
+<!-- EXISTING NAVBAR -->
 <nav style="background: #182340; padding: 12px; border-radius: 0 0 12px 12px;">
   <a routerLink="/login" routerLinkActive="active-link" style="margin-right: 18px; color: white;">Login</a>
   <a routerLink="/register" routerLinkActive="active-link" style="margin-right: 18px; color: white;">Register</a>
@@ -10,5 +20,5 @@
 
 <hr />
 
-<!-- This is where routed page components render -->
+<!-- Routed page content -->
 <router-outlet></router-outlet>

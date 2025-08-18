@@ -6,7 +6,8 @@ const cors = require('cors');
 const cookieParser = require('cookie-parser');
 require('dotenv').config();
 
-const { connectRedis, client: redisClient } = require('./redisClient');
+const { connectRedis } = require('./redisClient');
+const SocketHandler = require('./socketHandler');
 
 // Import all route files
 const chatRoutes = require('./routes/chat');
@@ -30,6 +31,26 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 
+// Create HTTP server and Socket.IO instance
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: { 
+    origin: 'http://localhost:4200',
+    methods: ['GET', 'POST'],
+    credentials: true
+  }
+});
+
+// Initialize Socket.IO handler
+const socketHandler = new SocketHandler(io);
+
+// Middleware to make socket handler accessible in routes
+app.use((req, res, next) => {
+  req.socketHandler = socketHandler;
+  req.io = io;
+  next();
+});
+
 // Register all routes
 app.use('/chat', chatRoutes);
 app.use('/ai', aiRoutes);
@@ -38,44 +59,76 @@ app.use('/posts', postRoutes);
 app.use('/friends', friendRoutes);
 app.use('/users', userRoutes);
 
-const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: '*', methods: ['GET', 'POST'] }
-});
-
-// Keep track of online users
-const users = {};
-
-io.on('connection', (socket) => {
-  const userId = socket.handshake.query.userId;
-  if (userId) {
-    users[userId] = socket.id;
-    console.log(`User connected: ${userId}`);
-  }
-
-  // Private message handling logic here (as discussed earlier)
-
-  socket.on('disconnect', () => {
-    if (userId) {
-      delete users[userId];
-      console.log(`User disconnected: ${userId}`);
-    }
+// Basic health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    onlineUsers: req.socketHandler.getOnlineUserCount()
   });
 });
 
 // Connect DBs and start server
 async function start() {
   try {
+    // Connect to MongoDB
     await mongoose.connect(process.env.MONGO_URI);
-    console.log('MongoDB connected');
+    console.log('✅ MongoDB connected');
+    
+    // Connect to Redis
     await connectRedis();
-    console.log('Redis connected');
+    console.log('✅ Redis connected');
 
     const PORT = process.env.PORT || 5000;
-    server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+    server.listen(PORT, () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+      console.log(` Socket.IO server ready for connections`);
+      console.log(` Frontend URL: http://localhost:4200`);
+      console.log(` Backend URL: http://localhost:${PORT}`);
+    });
   } catch (err) {
-    console.error('Startup error:', err);
+    console.error('❌ Startup error:', err);
+    process.exit(1);
   }
 }
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  console.log('\n🔄 Shutting down gracefully...');
+  
+  try {
+    // Close database connections
+    await mongoose.connection.close();
+    console.log('✅ MongoDB connection closed');
+    
+    // Close Redis connection
+    const { client: redisClient } = require('./redisClient');
+    if (redisClient) {
+      await redisClient.quit();
+      console.log('✅ Redis connection closed');
+    }
+    
+    // Close HTTP server
+    server.close(() => {
+      console.log('✅ HTTP server closed');
+      console.log('👋 Goodbye!');
+      process.exit(0);
+    });
+  } catch (err) {
+    console.error('❌ Error during shutdown:', err);
+    process.exit(1);
+  }
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+  console.error('❌ Uncaught Exception:', err);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (err) => {
+  console.error('❌ Unhandled Rejection:', err);
+  process.exit(1);
+});
 
 start();

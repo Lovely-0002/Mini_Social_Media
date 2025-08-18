@@ -1,23 +1,93 @@
-<h2>Chat</h2>
+<div class="chat-container">
+  <h2>Chat 
+    <span class="connection-status" [class.connected]="isConnected" [class.disconnected]="!isConnected">
+      {{ isConnected ? '🟢' : '🔴' }}
+    </span>
+  </h2>
 
-<p>
-  <label>
-    Target User ID:
-    <input [(ngModel)]="targetUserId" placeholder="Enter User ID to chat" />
-  </label>
-</p>
+  <div class="chat-layout">
+    <!-- Conversations List -->
+    <div class="conversations-panel">
+      <h3>Conversations</h3>
+      <div class="conversation-list">
+        <div 
+          *ngFor="let conv of conversations" 
+          class="conversation-item"
+          [class.active]="targetUserId === conv.userId"
+          (click)="selectConversation(conv.userId)"
+        >
+          <div class="conversation-info">
+            <strong>{{ conv.name || conv.email }}</strong>
+            <small class="last-message">{{ conv.lastMessage }}</small>
+          </div>
+          <small class="timestamp">{{ conv.lastMessageTime | date:'short' }}</small>
+        </div>
+        
+        <div *ngIf="conversations.length === 0" class="no-conversations">
+          No conversations yet
+        </div>
+      </div>
+    </div>
 
-<p>
-  <label>
-    Message:
-    <input [(ngModel)]="messageText" placeholder="Type your message" />
-  </label>
-  <button (click)="sendMessage()">Send</button>
-</p>
+    <!-- Chat Panel -->
+    <div class="chat-panel">
+      <!-- Manual User ID Input (for new chats) -->
+      <div class="new-chat-section">
+        <label>
+          Start new chat - Target User ID:
+          <input 
+            [(ngModel)]="targetUserId" 
+            placeholder="Enter User ID to chat" 
+            (blur)="loadChatHistory()"
+          />
+        </label>
+      </div>
 
-<div *ngFor="let m of messages">
-  <p>
-    <b>{{ m.fromUserId === userId ? 'You' : 'Friend' }}:</b> {{ m.message }}
-    <small>({{ m.timestamp | date:'short' }})</small>
-  </p>
+      <!-- Error Display -->
+      <div *ngIf="error" class="error-message">
+        {{ error }}
+      </div>
+
+      <!-- Chat Messages -->
+      <div class="chat-history" *ngIf="targetUserId">
+        <div *ngIf="isLoading" class="loading">Loading chat history...</div>
+        
+        <div *ngFor="let m of messages" class="message-item">
+          <p [class.chat-message-user]="m.fromUserId === userId" 
+             [class.chat-message-friend]="m.fromUserId !== userId">
+            <strong>{{ getUserDisplayName(m) }}:</strong> 
+            {{ m.message }}
+            <small class="message-time">({{ m.timestamp | date:'short' }})</small>
+          </p>
+        </div>
+
+        <div *ngIf="messages.length === 0 && !isLoading" class="no-messages">
+          No messages yet. Start the conversation!
+        </div>
+      </div>
+
+      <!-- Message Input -->
+      <div class="message-input-section" *ngIf="targetUserId">
+        <div class="message-input-row">
+          <input 
+            [(ngModel)]="messageText" 
+            placeholder="Type your message" 
+            (keyup.enter)="sendMessage()"
+            class="message-input"
+          />
+          <button 
+            (click)="sendMessage()" 
+            [disabled]="!messageText.trim() || !isConnected"
+            class="send-button"
+          >
+            Send
+          </button>
+        </div>
+      </div>
+
+      <div *ngIf="!targetUserId" class="select-user-prompt">
+        Select a conversation or enter a User ID to start chatting
+      </div>
+    </div>
+  </div>
 </div>

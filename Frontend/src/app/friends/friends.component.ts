@@ -10,12 +10,21 @@ import { ApiService } from '../services/api.service';
 })
 export class FriendsComponent implements OnInit {
   friends: any[] = [];
+  userId: string = ''; // Will be set after profile loads
 
-  constructor(private api: ApiService) {}
+  constructor(private api: ApiService) { }
 
-  ngOnInit() {
-    this.api.getProfile().subscribe((u: any) => {
-      this.api.getFriends(u._id).subscribe((data: any) => this.friends = data);
+  ngOnInit(): void {
+    this.api.getProfile().subscribe((profile: any) => {
+      this.userId = profile._id;      // Assumes user ID is returned here
+      this.loadFriends();
+    });
+  }
+
+  loadFriends() {
+    if (!this.userId) return;
+    this.api.getFriends(this.userId).subscribe((res: any) => {
+      this.friends = res;
     });
   }
 }
