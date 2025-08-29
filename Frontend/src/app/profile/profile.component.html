@@ -1,0 +1,40 @@
+<div class="profile">
+  <!-- Avatar -->
+  <div class="avatar">
+    <img
+      *ngIf="user.avatar"
+      [src]="'http://localhost:5000/' + user.avatar"
+      alt="Avatar"
+      width="120"
+      height="120"
+    >
+    <input type="file" (change)="onFileSelected($event)">
+  </div>
+
+  <!-- Profile details (view mode) -->
+  <div *ngIf="!editMode">
+    <h2>{{ user.name }}</h2>
+    <p>{{ user.bio || 'No bio yet' }}</p>
+    <button type="button" (click)="toggleEdit()">Edit Profile</button>
+  </div>
+
+  <!-- Edit mode -->
+  <div *ngIf="editMode">
+    <label for="name">Name:</label>
+    <input
+      id="name"
+      [(ngModel)]="user.name"
+      autocomplete="name"
+    />
+
+    <label for="bio">Bio:</label>
+    <textarea
+      id="bio"
+      [(ngModel)]="user.bio"
+      autocomplete="off"
+    ></textarea>
+
+    <button type="button" (click)="saveProfile()">Save</button>
+    <button type="button" (click)="toggleEdit()">Cancel</button>
+  </div>
+</div>

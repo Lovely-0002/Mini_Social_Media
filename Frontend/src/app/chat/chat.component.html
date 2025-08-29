@@ -13,8 +13,8 @@
         <div 
           *ngFor="let conv of conversations" 
           class="conversation-item"
-          [class.active]="targetUserId === conv.userId"
-          (click)="selectConversation(conv.userId)"
+          [class.active]="targetUserName === conv.name"
+          (click)="selectConversation(conv.name)"
         >
           <div class="conversation-info">
             <strong>{{ conv.name || conv.email }}</strong>
@@ -31,13 +31,13 @@
 
     <!-- Chat Panel -->
     <div class="chat-panel">
-      <!-- Manual User ID Input (for new chats) -->
+      <!-- Manual Username Input (for new chats) -->
       <div class="new-chat-section">
         <label>
-          Start new chat - Target User ID:
+          Start new chat - Username:
           <input 
-            [(ngModel)]="targetUserId" 
-            placeholder="Enter User ID to chat" 
+            [(ngModel)]="targetUserName" 
+            placeholder="Enter Username to chat" 
             (blur)="loadChatHistory()"
           />
         </label>
@@ -49,12 +49,12 @@
       </div>
 
       <!-- Chat Messages -->
-      <div class="chat-history" *ngIf="targetUserId">
+      <div class="chat-history" *ngIf="targetUserName">
         <div *ngIf="isLoading" class="loading">Loading chat history...</div>
         
         <div *ngFor="let m of messages" class="message-item">
-          <p [class.chat-message-user]="m.fromUserId === userId" 
-             [class.chat-message-friend]="m.fromUserId !== userId">
+          <p [class.chat-message-user]="isMyMessage(m)" 
+             [class.chat-message-friend]="!isMyMessage(m)">
             <strong>{{ getUserDisplayName(m) }}:</strong> 
             {{ m.message }}
             <small class="message-time">({{ m.timestamp | date:'short' }})</small>
@@ -67,7 +67,7 @@
       </div>
 
       <!-- Message Input -->
-      <div class="message-input-section" *ngIf="targetUserId">
+      <div class="message-input-section" *ngIf="targetUserName">
         <div class="message-input-row">
           <input 
             [(ngModel)]="messageText" 
@@ -85,8 +85,8 @@
         </div>
       </div>
 
-      <div *ngIf="!targetUserId" class="select-user-prompt">
-        Select a conversation or enter a User ID to start chatting
+      <div *ngIf="!targetUserName" class="select-user-prompt">
+        Select a conversation or enter a Username to start chatting
       </div>
     </div>
   </div>

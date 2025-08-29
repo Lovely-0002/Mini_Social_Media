@@ -15,14 +15,7 @@ interface ChatMessage {
   tempId?: string;
 }
 
-interface User {
-  _id: string;
-  name: string;
-  email: string;
-}
-
 interface Conversation {
-  userId: string;
   name: string;
   email: string;
   lastMessage: string;
@@ -40,7 +33,7 @@ interface Conversation {
 export class ChatComponent implements OnInit, OnDestroy {
   socket!: Socket;
   userId!: string;
-  targetUserId = '';
+  targetUserName = '';
   messageText = '';
   messages: ChatMessage[] = [];
   conversations: Conversation[] = [];
@@ -65,7 +58,6 @@ export class ChatComponent implements OnInit, OnDestroy {
   }
 
   initializeChat() {
-    // Get the logged-in user profile
     this.api.getProfile().subscribe({
       next: (user: any) => {
         this.userId = user._id;
@@ -79,11 +71,10 @@ export class ChatComponent implements OnInit, OnDestroy {
   }
 
   setupSocket() {
-    // Connect socket.io with cookies and userId
     this.socket = io('http://localhost:5000', {
       query: { userId: this.userId },
       withCredentials: true,
-      timeout: 10000, // 10 second timeout
+      timeout: 10000,
       forceNew: true
     });
 
@@ -98,25 +89,26 @@ export class ChatComponent implements OnInit, OnDestroy {
       console.log('⚠️ Socket disconnected');
     });
 
-    // Listen for incoming messages
     this.socket.on('private_message', (msg: ChatMessage) => {
       console.log('📨 Received message:', msg);
-      
-      // Only add message if it's part of current conversation
-      if ((msg.fromUserId === this.targetUserId && msg.toUserId === this.userId) ||
-          (msg.fromUserId === this.userId && msg.toUserId === this.targetUserId)) {
-        
-        // Avoid duplicates - check if message already exists
-        const exists = this.messages.find(m => 
-          m._id === msg._id || 
-          (m.tempId && m.message === msg.message && Math.abs(new Date(m.timestamp).getTime() - new Date(msg.timestamp).getTime()) < 5000)
+
+      if (
+        (msg.fromUserId?.name === this.targetUserName && msg.toUserId === this.userId) ||
+        (msg.toUserId?.name === this.targetUserName && msg.fromUserId === this.userId)
+      ) {
+        const exists = this.messages.find(
+          (m) =>
+            m._id === msg._id ||
+            (m.tempId &&
+              m.message === msg.message &&
+              Math.abs(new Date(m.timestamp).getTime() - new Date(msg.timestamp).getTime()) < 5000)
         );
-        
+
         if (!exists) {
           this.messages.push(msg);
         }
       }
-      // Update conversations list
+
       this.loadConversations();
     });
 
@@ -134,7 +126,7 @@ export class ChatComponent implements OnInit, OnDestroy {
   }
 
   loadConversations() {
-    this.api.getChatConversations().subscribe({
+    this.api.getConversations().subscribe({
       next: (data: any) => {
         this.conversations = data.conversations || [];
       },
@@ -144,22 +136,21 @@ export class ChatComponent implements OnInit, OnDestroy {
     });
   }
 
-  selectConversation(userId: string) {
-    this.targetUserId = userId;
+  selectConversation(userName: string) {
+    this.targetUserName = userName;
     this.messages = [];
     this.error = '';
     this.loadChatHistory();
   }
 
   loadChatHistory() {
-    if (!this.targetUserId) return;
+    if (!this.targetUserName) return;
 
     this.isLoading = true;
-    this.api.getChatHistory(this.targetUserId).subscribe({
+    this.api.getChatHistory(this.targetUserName).subscribe({
       next: (data: any) => {
         this.messages = data.messages || [];
         this.isLoading = false;
-        console.log(`✅ Loaded ${this.messages.length} messages from ${data.source}`);
       },
       error: (err) => {
         this.error = 'Failed to load chat history';
@@ -170,38 +161,30 @@ export class ChatComponent implements OnInit, OnDestroy {
   }
 
   async sendMessage() {
-    if (!this.messageText.trim() || !this.targetUserId || this.isSending) {
-      if (!this.targetUserId) {
-        this.error = 'Please select a user to chat with';
-      }
-      if (!this.messageText.trim()) {
-        this.error = 'Please enter a message';
-      }
+    if (!this.messageText.trim() || !this.targetUserName || this.isSending) {
+      this.error = 'Please enter a message and select a user';
       return;
     }
 
-    // Check connection status
     if (!navigator.onLine) {
       this.error = 'You are offline. Please check your connection.';
       return;
     }
 
     const messageData = {
-      toUserId: this.targetUserId,
+      toUserName: this.targetUserName,
       message: this.messageText.trim()
     };
 
-    // Create temporary message for optimistic update
     const tempMessage: ChatMessage = {
       tempId: Date.now().toString(),
       fromUserId: this.userId,
-      toUserId: this.targetUserId,
+      toUserId: this.targetUserName,
       message: messageData.message,
       timestamp: new Date().toISOString(),
       status: 'sending'
     };
 
-    // Add message to UI immediately
     this.messages.push(tempMessage);
     const originalMessage = this.messageText;
     this.messageText = '';
@@ -209,38 +192,28 @@ export class ChatComponent implements OnInit, OnDestroy {
     this.error = '';
 
     try {
-      // Send via HTTP API with retry logic
       const response = await this.sendMessageWithRetry(messageData);
-      
-      // Update temp message with real data
-      const index = this.messages.findIndex(m => m.tempId === tempMessage.tempId);
+
+      const index = this.messages.findIndex((m) => m.tempId === tempMessage.tempId);
       if (index !== -1) {
-        this.messages[index] = {
-          ...response.data,
-          status: 'sent'
-        };
+        this.messages[index] = { ...response.data, status: 'sent' };
       }
 
-      // Send real-time notification via socket
       if (this.socket && this.isConnected) {
         this.socket.emit('private_message', messageData);
       }
 
       console.log('✅ Message sent successfully');
-
     } catch (error: any) {
       console.error('❌ Send message error:', error);
-      
-      // Update temp message status to failed
-      const index = this.messages.findIndex(m => m.tempId === tempMessage.tempId);
+
+      const index = this.messages.findIndex((m) => m.tempId === tempMessage.tempId);
       if (index !== -1) {
         this.messages[index].status = 'failed';
       }
 
-      // Show error and restore message text for retry
       this.error = error.error?.error || 'Failed to send message. Click to retry.';
       this.messageText = originalMessage;
-      
     } finally {
       this.isSending = false;
     }
@@ -248,83 +221,35 @@ export class ChatComponent implements OnInit, OnDestroy {
 
   private async sendMessageWithRetry(messageData: any, attempt = 1): Promise<any> {
     try {
-      const response = await this.api.sendChatMessage(messageData.toUserId, messageData.message).toPromise();
-      
+      const response = await this.api.sendChatMessage(messageData.toUserName, messageData.message).toPromise();
+
       if (!response.success) {
         throw new Error(response.error || 'Failed to send message');
       }
-      
+
       return response;
-      
     } catch (error: any) {
-      console.error(`❌ Send attempt ${attempt} failed:`, error);
-      
-      if (attempt < this.maxRetries && 
-          (error.status === 500 || error.status === 0 || !error.status)) {
-        
-        // Wait before retry (exponential backoff)
-        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      if (attempt < this.maxRetries && (error.status === 500 || error.status === 0 || !error.status)) {
+        await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
         return this.sendMessageWithRetry(messageData, attempt + 1);
       }
-      
       throw error;
     }
   }
 
-  // Retry failed message
-  retryMessage(message: ChatMessage) {
-    if (message.status === 'failed') {
-      this.messageText = message.message;
-      this.sendMessage();
-    }
-  }
-
-  // Remove failed message
-  removeMessage(message: ChatMessage) {
-    if (message.status === 'failed' || message.tempId) {
-      const index = this.messages.indexOf(message);
-      if (index > -1) {
-        this.messages.splice(index, 1);
-      }
-    }
-  }
-
-  // Handle enter key press
-  onKeyPress(event: KeyboardEvent) {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      this.sendMessage();
-    }
-  }
-
-  // Clear error message
-  clearError() {
-    this.error = '';
-  }
-
-  // Helper method to get display name
   getUserDisplayName(message: ChatMessage): string {
     if (typeof message.fromUserId === 'string') {
-      return message.fromUserId === this.userId ? 'You' : 'Friend';
-    } else if (message.fromUserId && message.fromUserId.name) {
-      return message.fromUserId === this.userId ? 'You' : message.fromUserId.name;
+      return message.fromUserId === this.userId ? 'You' : this.targetUserName;
+    } else if (message.fromUserId?.name) {
+      return message.fromUserId._id === this.userId ? 'You' : message.fromUserId.name;
     }
-    return message.fromUserId === this.userId ? 'You' : 'Friend';
+    return 'Unknown';
   }
 
-  // Get message status icon/text
-  getMessageStatusText(message: ChatMessage): string {
-    switch (message.status) {
-      case 'sending': return '⏳';
-      case 'sent': return '✓';
-      case 'failed': return '❌';
-      default: return '';
-    }
-  }
-
-  // Check if message is from current user
   isMyMessage(message: ChatMessage): boolean {
-    return message.fromUserId === this.userId || 
-           (typeof message.fromUserId === 'object' && message.fromUserId._id === this.userId);
+    return (
+      message.fromUserId === this.userId ||
+      (typeof message.fromUserId === 'object' && message.fromUserId._id === this.userId)
+    );
   }
 }

@@ -6,6 +6,7 @@ import { FriendsComponent } from './friends/friends.component';
 import { ChatComponent } from './chat/chat.component';
 import { AiChatComponent } from './chat/ai-chat.component';
 import { CaptionComponent } from './chat/caption.component';
+import { ProfileComponent } from './profile/profile.component';
 
 export const routes: Routes = [
   { path: 'login', component: LoginComponent },
@@ -15,5 +16,6 @@ export const routes: Routes = [
   { path: 'chat', component: ChatComponent },
   { path: 'ai-chat', component: AiChatComponent },
   { path: 'caption', component: CaptionComponent },
+  { path: 'profile', component: ProfileComponent },   
   { path: '', redirectTo: '/login', pathMatch: 'full' }
 ];

@@ -1,8 +1,104 @@
 <h2>Your Feed</h2>
-<textarea [(ngModel)]="content" placeholder="What's on your mind?"></textarea>
-<button (click)="createPost()">Post</button>
 
-<div *ngFor="let p of posts">
-  <p><b>{{p.userId.name}}</b>: {{p.content}}</p>
-  <button (click)="like(p)">Like ({{p.likes.length}})</button>
+<!-- New Post Input -->
+<textarea
+  id="new-post-content"
+  name="newPostContent"
+  [(ngModel)]="content"
+  placeholder="What's on your mind?"
+  [disabled]="creatingPost"
+></textarea>
+<button (click)="createPost()" [disabled]="!content.trim() || creatingPost">Post</button>
+
+<!-- Loading Indicator -->
+<div *ngIf="loading">Loading posts...</div>
+
+<!-- Posts List -->
+<div *ngFor="let p of posts; trackBy: trackByPostId" style="margin-bottom: 20px;">
+
+  <p><b>{{ p.userId.name || 'Unknown' }}</b>: {{ p.content }}</p>
+
+  <!-- Like button and like preview -->
+  <button (click)="like(p)">
+    Like ({{ p.likeCount }})
+  </button>
+  <div *ngIf="p.likePreview?.length">
+    Liked by
+    <span *ngFor="let u of p.likePreview; let last = last;">
+      {{ u.name || 'Unknown' }}<span *ngIf="!last">, </span>
+    </span>
+    <span *ngIf="p.likeCount > (p.likePreview?.length ?? 0)">
+      and {{ p.likeCount - (p.likePreview?.length ?? 0) }} others
+    </span>
+  </div>
+
+  <!-- Comment preview -->
+  <div *ngIf="p.commentPreview?.length" class="comments" style="margin-top: 10px;">
+    <div *ngFor="let c of p.commentPreview; trackBy: trackByCommentId" style="margin-left: 20px; border-left: 1px solid #ccc; padding-left: 10px; margin-bottom: 5px;">
+      <p><b>{{ c.user.name || 'Unknown' }}</b>: {{ c.text }}</p>
+      
+      <button (click)="toggleReplyBox(c._id)">
+        {{ openReplyBoxes[c._id] ? 'Cancel' : 'Reply' }}
+      </button>
+
+      <!-- Reply Input Box -->
+      <div *ngIf="openReplyBoxes[c._id]" style="margin-top: 5px;">
+        <textarea
+          id="reply-text-{{ c._id }}"
+          name="replyText{{ c._id }}"
+          [(ngModel)]="commentTexts[c._id]"
+          placeholder="Write a reply..."
+        ></textarea>
+        <button (click)="submitComment(p._id, c._id)" [disabled]="!(commentTexts[c._id] || '').trim()">Submit Reply</button>
+      </div>
+    </div>
+
+    <!-- Show all comments button -->
+    <button *ngIf="(p.totalComments ?? 0) > (p.commentPreview?.length ?? 0) && !showAllComments[p._id]" (click)="loadAllComments(p._id)">
+      View all {{ p.totalComments }} comments
+    </button>
+  </div>
+
+  <!-- Full threaded comments (shown if "View all" clicked) -->
+  <div *ngIf="showAllComments[p._id]" style="margin-left: 20px; border-left: 1px solid #aaa; padding-left: 20px;">
+    <ng-container *ngTemplateOutlet="recursiveComments; context:{ $implicit: commentTrees[p._id], postId: p._id }"></ng-container>
+  </div>
+
+  <!-- New Comment Input for Post -->
+  <textarea
+    id="new-comment-{{ p._id }}"
+    name="newComment{{ p._id }}"
+    [(ngModel)]="commentTexts[p._id]"
+    placeholder="Add a comment..."
+  ></textarea>
+  <button (click)="submitComment(p._id)" [disabled]="!(commentTexts[p._id] || '').trim()">Post Comment</button>
 </div>
+
+<!-- Pagination Controls -->
+<div *ngIf="totalPages > 1" class="pagination-controls">
+  <button (click)="goToPage(currentPage - 1)" [disabled]="currentPage === 1">Previous</button>
+  <span>Page {{ currentPage }} of {{ totalPages }}</span>
+  <button (click)="goToPage(currentPage + 1)" [disabled]="currentPage === totalPages">Next</button>
+</div>
+
+<!-- Recursive Comments Template -->
+<ng-template #recursiveComments let-comments let-postId="postId">
+  <div *ngFor="let comment of comments" style="margin-bottom: 10px;">
+    <p><b>{{ comment.user.name || 'Unknown' }}</b>: {{ comment.text }}</p>
+    <button (click)="toggleReplyBox(comment._id)">
+      {{ openReplyBoxes[comment._id] ? 'Cancel' : 'Reply' }}
+    </button>
+    <div *ngIf="openReplyBoxes[comment._id]" style="margin-top: 5px;">
+      <textarea
+        id="reply-text-{{ comment._id }}"
+        name="replyText{{ comment._id }}"
+        [(ngModel)]="commentTexts[comment._id]"
+        placeholder="Write a reply..."
+      ></textarea>
+      <button (click)="submitComment(postId, comment._id)" [disabled]="!(commentTexts[comment._id] || '').trim()">Submit Reply</button>
+    </div>
+    <div *ngIf="comment.replies?.length" style="margin-left: 20px; border-left: 1px solid #ccc; padding-left: 10px; margin-top: 5px;">
+      <ng-container *ngTemplateOutlet="recursiveComments; context: { $implicit: comment.replies, postId: postId }"></ng-container>
+    </div>
+  </div>
+</ng-template>

@@ -4,6 +4,8 @@ const mongoose = require('mongoose');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
+const path = require('path');
+const fs = require('fs');
 require('dotenv').config();
 
 const { connectRedis } = require('./redisClient');
@@ -19,10 +21,17 @@ const userRoutes = require('./routes/users');
 
 const app = express();
 
+// Create uploads directory if it doesn't exist
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+  console.log('📁 Created uploads directory');
+}
+
 // CORS configuration - allow credentials for auth
-app.use(cors({ 
+app.use(cors({
   origin: 'http://localhost:4200',
-  credentials: true,  
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   exposedHeaders: ['set-cookie']
@@ -31,10 +40,14 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 
+// Serve static files (uploaded images) - IMPORTANT: This must be before routes
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+console.log('📸 Static file serving enabled for /uploads');
+
 // Create HTTP server and Socket.IO instance
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { 
+  cors: {
     origin: 'http://localhost:4200',
     methods: ['GET', 'POST'],
     credentials: true
@@ -61,10 +74,11 @@ app.use('/users', userRoutes);
 
 // Basic health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
+  res.json({
+    status: 'OK',
     timestamp: new Date().toISOString(),
-    onlineUsers: req.socketHandler.getOnlineUserCount()
+    onlineUsers: req.socketHandler.getOnlineUserCount(),
+    uploadsDir: fs.existsSync(uploadsDir) ? 'exists' : 'missing'
   });
 });
 
@@ -82,9 +96,10 @@ async function start() {
     const PORT = process.env.PORT || 5000;
     server.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
-      console.log(` Socket.IO server ready for connections`);
-      console.log(` Frontend URL: http://localhost:4200`);
-      console.log(` Backend URL: http://localhost:${PORT}`);
+      console.log(`📸 Uploads available at: http://localhost:${PORT}/uploads`);
+      console.log(`🔗 Socket.IO server ready for connections`);
+      console.log(`🎯 Frontend URL: http://localhost:4200`);
+      console.log(`🎯 Backend URL: http://localhost:${PORT}`);
     });
   } catch (err) {
     console.error('❌ Startup error:', err);

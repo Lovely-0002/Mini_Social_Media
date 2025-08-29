@@ -7,148 +7,117 @@ const authMiddleware = require('../middleware/authMiddleware');
 
 // Send message to targeted user
 router.post('/send', authMiddleware, async (req, res) => {
-  const { toUserId, message } = req.body;
-  const fromUserId = req.userId; // From auth middleware
-     
+  const { toUserName, message } = req.body;
+  const fromUserId = req.userId;
+
   try {
-    if (!toUserId || !message) {
-      return res.status(400).json({ error: 'toUserId and message are required' });
+    if (!toUserName || !message) {
+      return res.status(400).json({ error: 'toUserName and message are required' });
     }
 
-    // Save to database first (primary storage)
+    // Find recipient by name
+    const User = mongoose.model('User'); 
+    const recipient = await User.findOne({ name: toUserName });
+    if (!recipient) {
+      return res.status(404).json({ error: 'Recipient not found' });
+    }
+    const toUserId = recipient._id;
+
+    // Save to database
     const chatMessage = new ChatMessage({
       fromUserId,
       toUserId,
       message,
       timestamp: new Date()
     });
-         
     const savedMessage = await chatMessage.save();
-         
-    // Cache in Redis for both users - with proper error handling
-    try {
-      const redisKey1 = `chat:${fromUserId}:${toUserId}`;
-      const redisKey2 = `chat:${toUserId}:${fromUserId}`;
-      
-      // Create a clean message object for Redis
-      const messageForRedis = {
-        _id: savedMessage._id.toString(),
-        fromUserId: savedMessage.fromUserId.toString(),
-        toUserId: savedMessage.toUserId.toString(),
-        message: savedMessage.message,
-        timestamp: savedMessage.timestamp.toISOString()
-      };
-      
-      const messageData = JSON.stringify(messageForRedis);
-      const timestamp = savedMessage.timestamp.getTime(); // Convert to milliseconds
-      
-      // Validate data before Redis operation
-      if (timestamp && messageData && !isNaN(timestamp)) {
-        await Promise.all([
-          redisClient.zAdd(redisKey1, { score: timestamp, value: messageData }),
-          redisClient.zAdd(redisKey2, { score: timestamp, value: messageData })
-        ]);
-        console.log('✅ Message cached in Redis');
-      } else {
-        console.warn('⚠️ Invalid Redis data, skipping cache:', { timestamp, messageDataLength: messageData?.length });
-      }
-    } catch (redisError) {
-      console.warn('⚠️ Redis cache error (non-critical):', redisError.message);
-      // Don't throw - message was saved to MongoDB successfully
-    }
 
-    // Send real-time notification via Socket.IO (if user is online)
-    let realTimeDelivered = false;
+    // Emit via Socket.IO
     if (req.socketHandler) {
-      const sent = req.socketHandler.sendToUser(toUserId, 'private_message', {
+      req.socketHandler.sendToUser(toUserId.toString(), 'private_message', {
         _id: savedMessage._id,
         fromUserId,
         toUserId,
         message,
         timestamp: savedMessage.timestamp
       });
-      
-      realTimeDelivered = req.socketHandler.isUserOnline(toUserId);
-      console.log(`Real-time message ${sent ? 'delivered' : 'queued'} for user ${toUserId}`);
     }
-         
-    // Always send success response
+
     res.status(200).json({
       success: true,
       message: 'Message sent successfully',
       data: {
         _id: savedMessage._id,
-        fromUserId: savedMessage.fromUserId,
-        toUserId: savedMessage.toUserId,
-        message: savedMessage.message,
+        fromUserId,
+        toUserId,
+        message,
         timestamp: savedMessage.timestamp
-      },
-      realTimeDelivered
+      }
     });
 
   } catch (err) {
-    console.error('❌ Critical error sending message:', err);
-    res.status(500).json({ 
-      success: false,
-      error: 'Failed to send message',
-      details: process.env.NODE_ENV === 'development' ? err.message : undefined
-    });
+    console.error('❌ Error sending message:', err);
+    res.status(500).json({ success: false, error: 'Failed to send message' });
   }
 });
 
-// Get all chat history for current user
-router.get('/history/:userId', authMiddleware, async (req, res) => {
-  const { userId } = req.params;
+// ✅ Get chat history by userName (instead of userId)
+router.get('/history/by-name/:userName', authMiddleware, async (req, res) => {
+  const { userName } = req.params;
   const currentUserId = req.userId;
-     
+
   try {
-    // First try Redis cache for recent messages
+    const User = mongoose.model('User');
+    const otherUser = await User.findOne({ name: userName });
+    if (!otherUser) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    const otherUserId = otherUser._id.toString();
+
+    // First try Redis cache
     let messages = [];
     let source = 'mongodb';
-    
+
     try {
-      const redisKey = `chat:${currentUserId}:${userId}`;
-      const cachedMessages = await redisClient.zRange(redisKey, 0, 49, { REV: true }); // Last 50 messages
-      
+      const redisKey = `chat:${currentUserId}:${otherUserId}`;
+      const cachedMessages = await redisClient.zRange(redisKey, 0, 49, { REV: true });
+
       if (cachedMessages && cachedMessages.length > 0) {
         messages = cachedMessages.map(msg => JSON.parse(msg)).reverse();
         source = 'redis-cache';
         console.log(`✅ Loaded ${messages.length} messages from Redis cache`);
       }
     } catch (redisError) {
-      console.warn('⚠️ Redis fetch error, falling back to MongoDB:', redisError.message);
+      console.warn('⚠️ Redis fetch error, fallback to MongoDB:', redisError.message);
     }
-    
-    // If no Redis cache or error, get from MongoDB
+
+    // If no Redis cache, get from MongoDB
     if (messages.length === 0) {
       const dbMessages = await ChatMessage.find({
         $or: [
-          { fromUserId: currentUserId, toUserId: userId },
-          { fromUserId: userId, toUserId: currentUserId }
+          { fromUserId: currentUserId, toUserId: otherUserId },
+          { fromUserId: otherUserId, toUserId: currentUserId }
         ]
       })
-      .populate('fromUserId', 'name email')
-      .populate('toUserId', 'name email')
-      .sort({ timestamp: 1 }) // Oldest first
-      .limit(100);
-      
+        .populate('fromUserId', 'name email')
+        .populate('toUserId', 'name email')
+        .sort({ timestamp: 1 })
+        .limit(100);
+
       messages = dbMessages;
       source = 'mongodb';
     }
-         
-    res.json({ 
+
+    res.json({
       success: true,
-      source, 
+      source,
       messages,
       count: messages.length,
-      userOnline: req.socketHandler ? req.socketHandler.isUserOnline(userId) : false
+      userOnline: req.socketHandler ? req.socketHandler.isUserOnline(otherUserId) : false
     });
   } catch (err) {
-    console.error('❌ Error fetching user history:', err);
-    res.status(500).json({ 
-      success: false,
-      error: 'Failed to fetch history' 
-    });
+    console.error('❌ Error fetching history by name:', err);
+    res.status(500).json({ success: false, error: 'Failed to fetch history' });
   }
 });
 

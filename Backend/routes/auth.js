@@ -37,7 +37,7 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// Login
+// FIXED Login - now returns user data
 router.post('/login', async (req, res) => {
   try {
     if (!req.body) {
@@ -74,7 +74,22 @@ router.post('/login', async (req, res) => {
     });
 
     await User.findByIdAndUpdate(user._id, { lastLogin: new Date() });
-    res.json({ message: 'Login successful' });
+
+    // FIXED: Return user data (without password)
+    const userResponse = {
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      avatar: user.avatar,
+      bio: user.bio
+    };
+
+    console.log('✅ Login successful for user:', userResponse._id);
+
+    res.json({
+      message: 'Login successful',
+      user: userResponse  // 🔥 This is the key addition!
+    });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Server error during login' });
@@ -99,6 +114,20 @@ router.post('/change-password', authMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Change password error:', error);
     res.status(500).json({ error: 'Server error while changing password' });
+  }
+});
+
+// Get all users (for friend requests, etc.)
+router.get('/all', authMiddleware, async (req, res) => {
+  try {
+    const users = await User.find({ _id: { $ne: req.userId } })
+      .select('name email avatar bio')
+      .limit(50);
+    
+    res.json(users);
+  } catch (error) {
+    console.error('Get all users error:', error);
+    res.status(500).json({ error: 'Server error while fetching users' });
   }
 });
 
